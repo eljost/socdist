@@ -27,11 +27,11 @@ def engrad(coords, scale=1e-3):
     return energy, gradient
 
 
-def optimize(coords, scale=1e-3, max_cycles=10, max_step=0.05):
+def optimize(coords, scale=1e-3, max_cycles=15, max_step=0.05):
     points = coords.shape[0]
     for i in range(max_cycles):
         e, g = engrad(coords, scale)
-        print(f"{i:02d} {e:.6f}")
+        print(f"\t{i:02d} {e:.6f}")
 
         if e < (points/2):
             print("Converged")
@@ -56,9 +56,6 @@ def runsim(points=300, moving=0.125, infected=0.05, death_rate=0.02,
     velocity = 0.2
     dt = 0.02
 
-    # Derived quantities
-    points_moving = int(moving * points)
-    moving_inds = np.random.choice(points, size=points_moving, replace=False)
     infected_num = int(infected * points)
     infected_inds = np.random.choice(points, size=infected_num, replace=False).tolist()
     recover_at = {recover_steps: infected_inds}
@@ -71,14 +68,18 @@ def runsim(points=300, moving=0.125, infected=0.05, death_rate=0.02,
     min_y = 0 + radius
     max_y = 1 - radius
 
-    print(f"{moving:.2%} moving, {points_moving} points")
-    print(f"{infected:.2%} infected, {infected_num} points")
-
     coords = np.random.rand(points, 2)
+
+    # Initial velocities
+    points_moving = int(moving * points)
+    moving_inds = np.random.choice(points, size=points_moving, replace=False)
     velocities = np.zeros_like(coords)
     directions = np.random.rand(points_moving, 2)
     directions /= np.linalg.norm(directions, axis=1)[:,None]
     velocities[moving_inds] = velocity * directions
+
+    print(f"{moving:.2%} moving, {points_moving} points")
+    print(f"{infected:.2%} infected, {infected_num} points")
 
     if opt:
         print("Optimization to avoid close contacts")
@@ -206,7 +207,9 @@ def runsim(points=300, moving=0.125, infected=0.05, death_rate=0.02,
 
     # Stacked plot
     sfig, sax = plt.subplots()
-    stacks = sax.stackplot(stack_x, stack_y, colors=("red", "lightgreen", "k", "blue"))
+    labels = ("Infected", "Recovered", "Dead", "Pure")
+    stacks = sax.stackplot(stack_x, stack_y, colors=("red", "lightgreen", "k", "blue"),
+                           labels=labels)
     sfig.suptitle(f"Step {cur_frame}")
     plt.show()
 
