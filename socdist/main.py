@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+import argparse
+import sys
+
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
@@ -43,8 +46,9 @@ def optimize(coords, scale=1e-3, max_cycles=10, max_step=0.05):
     return coords
 
 
-def run(points=300, moving=0.125, infected=0.05, death_rate=0.02,
-        recover_steps=150, steps=1000, seed=None, opt=False):
+def runsim(points=300, moving=0.125, infected=0.05, death_rate=0.02,
+           recover_steps=150, steps=1000, seed=None, opt=False, debug=True):
+
     if seed is not None:
         np.random.seed(seed)
 
@@ -77,6 +81,7 @@ def run(points=300, moving=0.125, infected=0.05, death_rate=0.02,
     velocities[moving_inds] = velocity * directions
 
     if opt:
+        print("Optimization to avoid close contacts")
         coords = optimize(coords)
 
     fig, ax0 = plt.subplots(figsize=FIGSIZE)
@@ -95,10 +100,12 @@ def run(points=300, moving=0.125, infected=0.05, death_rate=0.02,
     stack_y = np.zeros((4, steps))
 
     def frame_gen():
+        """Stop when no infected points are left."""
         i = 0
         while infected_num > 0:
             yield i
             i += 1
+        print(f"No infections after {i} frames")
 
     cur_frame = 0
     def propagate(frame):
@@ -110,30 +117,31 @@ def run(points=300, moving=0.125, infected=0.05, death_rate=0.02,
         nonlocal points_dead
         cur_frame = frame
 
-        # Recovery
+        # Handle recovery
         try:
             recovering = recover_at[frame]
             # import pdb; pdb.set_trace()
             infected_inds = list(set(infected_inds) - set(recovering))
-            print("\tRecovered: ", recovering)
+            if debug:
+                print("\tRecovered: ", recovering)
             already_recovered |= set(recovering)
         except KeyError:
             pass
 
-        # Deaths
+        # Handle deaths
         death_roulette = np.random.rand(len(infected_inds))
         died_inds = np.flatnonzero(death_roulette <= death_rate)
         died_set = set(died_inds)
-        if died_set:
+        if died_set and debug:
             print(f"{len(died_set)} died!")
         velocities[died_inds] = (0., 0.)
         infected_inds = list(set(infected_inds) - died_set)
         points_dead |= died_set
-        # import pdb; pdb.set_trace()
 
-        if (frame % 50) == 0:
+        if ((frame % 50) == 0) and debug:
             print(frame)
 
+        # Reflections at the boundary
         # Check for left/right reflection
         reflect_x = np.logical_or(coords[:,0] <= min_x, coords[:,0] >= max_x)
         velocities[reflect_x,0] *= -1
@@ -146,12 +154,14 @@ def run(points=300, moving=0.125, infected=0.05, death_rate=0.02,
         coords += step
 
         # Check for infection
-        #   Calculate points in close contact, only consider infected points
+        # Calculate points in close contact, only consider infected points
         infected_coords = coords[infected_inds]
         dists = np.linalg.norm(coords - infected_coords[:,None,:], axis=2)
         _, new_infections = np.where(dists <= diameter)
-        #   Update infected inds
+
         infected_set = set(infected_inds)
+        # Only infect points that are not already infected, alive and not
+        # yet recovered.
         new_infections = (set(new_infections) - infected_set - already_recovered
                           - set(points_dead))
         if new_infections:
@@ -162,12 +172,13 @@ def run(points=300, moving=0.125, infected=0.05, death_rate=0.02,
                 recover_at[key] = list(new_infections)
         infected_inds = list(set(infected_inds) | set(new_infections))
 
-        # All
+        # Update scatter plots
         scatter.set_offsets(coords)
         # Infected
         scatter_i.set_offsets(coords[infected_inds])
         # Recovered
         scatter_r.set_offsets(coords[list(already_recovered)])
+        # Dead
         scatter_d.set_offsets(coords[list(points_dead)])
 
         infected_num = len(infected_inds)
@@ -178,7 +189,7 @@ def run(points=300, moving=0.125, infected=0.05, death_rate=0.02,
         ratio = infected_num / points
         stack_y[:,frame] = (infected_num, recovered_num, dead_num, pure)
 
-        if (frame % 50) == 0:
+        if (frame % 25) == 0:
             title = f"Frame {frame:03d}, {ratio:.2%} infected"
             ax0.set_title(title)
 
@@ -193,12 +204,51 @@ def run(points=300, moving=0.125, infected=0.05, death_rate=0.02,
     )
     plt.show()
 
-    fig, ax = plt.subplots()
-    stacks = ax.stackplot(stack_x, stack_y, colors=("red", "lightgreen", "k", "blue"))
-    fig.suptitle(f"Step {cur_frame}")
+    # Stacked plot
+    sfig, sax = plt.subplots()
+    stacks = sax.stackplot(stack_x, stack_y, colors=("red", "lightgreen", "k", "blue"))
+    sfig.suptitle(f"Step {cur_frame}")
     plt.show()
+
+    return fig, sfig
+
+
+def parse_args(args):
+    parser = argparse.ArgumentParser()
+
+
+    parser.add_argument("--points", type=int, default=300)
+    parser.add_argument("--moving", type=float, default=0.125)
+    parser.add_argument("--infected", type=float, default=0.05)
+    parser.add_argument("--death_rate", type=float, default=0.02)
+
+    parser.add_argument("--recover_steps", type=int, default=150)
+    parser.add_argument("--steps", type=int, default=1000)
+    parser.add_argument("--seed", type=int, default=20180325)
+    parser.add_argument("--opt", action="store_true")
+    parser.add_argument("--debug", action="store_true")
+
+    return parser.parse_args(args)
+
+
+def run():
+    args = parse_args(sys.argv[1:])
+
+    sim_kwargs = {
+        "points": args.points,
+        "moving": args.moving,
+        "infected": args.moving,
+        "death_rate": args.death_rate,
+
+        "recover_steps": args.recover_steps,
+        "steps": args.steps,
+        "seed": args.seed,
+        "opt": args.opt,
+        "debug": args.debug,
+    }
+
+    runsim(**sim_kwargs)
 
 
 if __name__ == "__main__":
-    seed = 20180325
-    run(seed=seed, opt=True)
+    run()
