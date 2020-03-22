@@ -187,11 +187,12 @@ def runsim(points=300, moving=0.125, infected=0.05, death_rate=0.02,
         dead_num = len(points_dead)
         pure = points - recovered_num - infected_num
         healthy = points - infected_num
-        ratio = infected_num / points
+        inf_ratio = infected_num / points
+        dead_ratio = dead_num / points
         stack_y[:,frame] = (infected_num, recovered_num, dead_num, pure)
 
         if (frame % 25) == 0:
-            title = f"Frame {frame:03d}, {ratio:.2%} infected"
+            title = f"Frame {frame:03d}, {inf_ratio:.2%} infected, {dead_ratio:.2%} dead"
             ax0.set_title(title)
 
     # propagate(0)
@@ -210,6 +211,7 @@ def runsim(points=300, moving=0.125, infected=0.05, death_rate=0.02,
     labels = ("Infected", "Recovered", "Dead", "Pure")
     stacks = sax.stackplot(stack_x, stack_y, colors=("red", "lightgreen", "k", "blue"),
                            labels=labels)
+    sax.legend()
     sfig.suptitle(f"Step {cur_frame}")
     plt.show()
 
@@ -227,7 +229,7 @@ def parse_args(args):
 
     parser.add_argument("--recover_steps", type=int, default=150)
     parser.add_argument("--steps", type=int, default=1000)
-    parser.add_argument("--seed", type=int, default=20180325)
+    parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--opt", action="store_true")
     parser.add_argument("--debug", action="store_true")
 
@@ -240,7 +242,7 @@ def run():
     sim_kwargs = {
         "points": args.points,
         "moving": args.moving,
-        "infected": args.moving,
+        "infected": args.infected,
         "death_rate": args.death_rate,
 
         "recover_steps": args.recover_steps,
